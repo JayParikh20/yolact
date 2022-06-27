@@ -651,7 +651,7 @@ yolact_base_config = coco_base_config.copy({
     'num_classes': len(evtek_mixedset1_dataset.class_names) + 1,
 
     # Image Size
-    'max_size': 2448,
+    'max_size': 612,
 
     # Training params
     'lr_steps': (280000, 600000, 700000, 750000),
