@@ -136,11 +136,11 @@ dataset_base = Config({
 evtek_mixedset1_dataset = dataset_base.copy({
     'name': 'Evtek Mixed Set 1 Dataset',
 
-    'train_images': './data/2021-07-27_14-50-49_mixed_set_1/images/',
-    'train_info': './data/2021-07-27_14-50-49_mixed_set_1/annotations/instances_default.json',
+    'train_images': './data/mixed_set_1_coco_scaled/images/',
+    'train_info': './data/mixed_set_1_coco_scaled/annotations/data.json',
 
-    'valid_images': './data/2021-07-27_14-50-49_mixed_set_1/images/',
-    'valid_info': './data/2021-07-27_14-50-49_mixed_set_1/annotations/instances_default.json',
+    'valid_images': './data/mixed_set_1_coco_scaled/images/',
+    'valid_info': './data/mixed_set_1_coco_scaled/annotations/data.json',
 
     'has_gt': True,
     'class_names': EVTEK_MIXEDSET1_CLASSES
