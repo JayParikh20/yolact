@@ -27,15 +27,16 @@ COLORS = ((244, 67, 54),
 MEANS = (103.94, 116.78, 123.68)
 STD = (57.38, 57.12, 58.40)
 
-EVTEK_MIXEDSET1_CLASSES = ('Aquafina (16oz Bottle)', 'Blue Moon Belgian White (12oz Can)', 'Bud Light (12oz Can)', 'Bud Light (24oz Can)', 'Budweiser (12oz Can)',
-                           'Budweiser (24oz Can)', 'Canada Dry Ginger Ale (12oz Can)', 'Canada Dry Seltzer (12oz Can)', 'Coke (12oz Can)', 'Coke (16.9/20oz Bottle)',
-                           'Coke (20oz Bottle)', 'Coke (67.6oz Bottle)', 'Coke Zero (20oz Bottle)', 'Coke Zero (67.6oz Bottle)', 'Coors Banquet (24oz Can)', 'Coors Light (12oz Can)',
-                           'Coors Light (24oz Can)', 'Dasani (16.9/20oz Bottle)', 'Diet Coke (12oz Can)', 'Diet Coke (20oz Bottle)', 'Diet Coke (67.6oz Bottle)',
-                           'Diet Pepsi (12oz Can)', 'Fanta (16.9oz Bottle)', 'Great Value Water (16.9oz Bottle)', 'Heineken (12oz Can)', 'Heineken (24oz Can)',
-                           'Kirkland Water (16oz Bottle)', 'Miller Lite (12oz Can)', 'Miller Lite (24oz Can)', 'Modelo Especial (12oz Can)',
-                           'Monster Green (16oz Can)', 'Nestle Pure Life (16.9oz Bottle)',  'Pepsi (12oz Can)', 'Pepsi (16.9oz Bottle)', 'Pepsi (67.6oz Bottle)',
-                           'Poland Spring (16.9oz Bottle)', 'Poland Spring (1l Bottle)', 'Red Bull (8.4oz Can)', 'Rest', 'Sprite (12oz Can)', 'Sprite (16.9oz Bottle)', 'Sprite (67.6oz Bottle)',
-                           'Sprite Zero (12oz Can)', 'Sunkist Orange (12oz Can)', 'Wellsley Farms Purified Water (16oz bottle)')
+EVTEK_MIXEDSET1_CLASSES = (
+    'Aquafina (16oz Bottle)', 'Blue Moon Belgian White (12oz Can)', 'Bud Light (12oz Can)', 'Bud Light (24oz Can)', 'Budweiser (12oz Can)', 'Budweiser (24oz Can)',
+    'Canada Dry Ginger Ale (12oz Can)', 'Canada Dry Seltzer (12oz Can)', 'Coke (12oz Can)', 'Coke (16.9/20oz Bottle)', 'Coors Light (12oz Can)', 'Coors Light (24oz Can)',
+    'Dasani (16.9/20oz Bottle)', 'Diet Coke (12oz Can)', 'Diet Pepsi (12oz Can)', 'Great Value Water (16.9oz Bottle)', 'Heineken (12oz Can)', 'Heineken (24oz Can)',
+    'Kirkland Water (16oz Bottle)', 'Miller Lite (12oz Can)', 'Miller Lite (24oz Can)', 'Nestle Pure Life (16.9oz Bottle)', 'Pepsi (12oz Can)', 'Poland Spring (16.9oz Bottle)',
+    'Poland Spring (1l Bottle)', 'Red Bull (8.4oz Can)', 'Rest', 'Sprite (12oz Can)', 'Sunkist Orange (12oz Can)', 'Wellsley Farms Purified Water (16oz bottle)',
+    'Coke (67.6oz Bottle)', 'Coke Zero (20oz Bottle)', 'Coke Zero (67.6oz Bottle)', 'Diet Coke (20oz Bottle)', 'Diet Coke (67.6oz Bottle)', 'Modelo Especial (12oz Can)',
+    'Monster Green (16oz Can)', 'Pepsi (67.6oz Bottle)', 'Sprite (67.6oz Bottle)', 'Sprite Zero (12oz Can)', 'Coke (20oz Bottle)', 'Coors Banquet (24oz Can)',
+    'Sprite (16.9oz Bottle)',
+    'Fanta (16.9oz Bottle)', 'Pepsi (16.9oz Bottle)')
 
 COCO_CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                 'train', 'truck', 'boat', 'traffic light', 'fire hydrant',
