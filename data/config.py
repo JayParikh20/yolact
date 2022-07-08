@@ -27,16 +27,16 @@ COLORS = ((244, 67, 54),
 MEANS = (103.94, 116.78, 123.68)
 STD = (57.38, 57.12, 58.40)
 
-EVTEK_MIXEDSET1_CLASSES = (
+EVTEK_CLASSES = (
     'Aquafina (16oz Bottle)', 'Blue Moon Belgian White (12oz Can)', 'Bud Light (12oz Can)', 'Bud Light (24oz Can)', 'Budweiser (12oz Can)', 'Budweiser (24oz Can)',
-    'Canada Dry Ginger Ale (12oz Can)', 'Canada Dry Seltzer (12oz Can)', 'Coke (12oz Can)', 'Coke (16.9/20oz Bottle)', 'Coors Light (12oz Can)', 'Coors Light (24oz Can)',
-    'Dasani (16.9/20oz Bottle)', 'Diet Coke (12oz Can)', 'Diet Pepsi (12oz Can)', 'Great Value Water (16.9oz Bottle)', 'Heineken (12oz Can)', 'Heineken (24oz Can)',
-    'Kirkland Water (16oz Bottle)', 'Miller Lite (12oz Can)', 'Miller Lite (24oz Can)', 'Nestle Pure Life (16.9oz Bottle)', 'Pepsi (12oz Can)', 'Poland Spring (16.9oz Bottle)',
-    'Poland Spring (1l Bottle)', 'Red Bull (8.4oz Can)', 'Rest', 'Sprite (12oz Can)', 'Sunkist Orange (12oz Can)', 'Wellsley Farms Purified Water (16oz bottle)',
-    'Coke (67.6oz Bottle)', 'Coke Zero (20oz Bottle)', 'Coke Zero (67.6oz Bottle)', 'Diet Coke (20oz Bottle)', 'Diet Coke (67.6oz Bottle)', 'Modelo Especial (12oz Can)',
-    'Monster Green (16oz Can)', 'Pepsi (67.6oz Bottle)', 'Sprite (67.6oz Bottle)', 'Sprite Zero (12oz Can)', 'Coke (20oz Bottle)', 'Coors Banquet (24oz Can)',
-    'Sprite (16.9oz Bottle)',
-    'Fanta (16.9oz Bottle)', 'Pepsi (16.9oz Bottle)')
+    'Canada Dry Ginger Ale (12oz Can)', 'Canada Dry Seltzer (12oz Can)', 'Coke (12oz Can)', 'Coke (16.9/20oz Bottle)', 'Coke (67.6oz Bottle)',
+    'Coke Zero (20oz Bottle)', 'Coke Zero (67.6oz Bottle)', 'Coors Light (12oz Can)', 'Coors Light (24oz Can)', 'Dasani (16.9/20oz Bottle)',
+    'Diet Coke (12oz Can)', 'Diet Coke (20oz Bottle)', 'Diet Coke (67.6oz Bottle)', 'Diet Pepsi (12oz Can)', 'Great Value Water (16.9oz Bottle)',
+    'Heineken (12oz Can)', 'Heineken (24oz Can)', 'Kirkland Water (16oz Bottle)', 'Miller Lite (12oz Can)', 'Miller Lite (24oz Can)',
+    'Modelo Especial (12oz Can)', 'Monster Green (16oz Can)', 'Nestle Pure Life (16.9oz Bottle)', 'Pepsi (12oz Can)', 'Pepsi (67.6oz Bottle)',
+    'Poland Spring (16.9oz Bottle)', 'Poland Spring (33.3oz Bottle)', 'Red Bull (8.4oz Can)', 'Rest', 'Sprite (12oz Can)', 'Sprite (67.6oz Bottle)',
+    'Sprite Zero (12oz Can)', 'Sunkist Orange (12oz Can)', 'Wellsley Farms Purified Water (16oz bottle)'
+)
 
 COCO_CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                 'train', 'truck', 'boat', 'traffic light', 'fire hydrant',
@@ -134,17 +134,17 @@ dataset_base = Config({
     'label_map': None
 })
 
-evtek_mixedset1_dataset = dataset_base.copy({
-    'name': 'Evtek Mixed Set 1 Dataset',
+evtek_dataset = dataset_base.copy({
+    'name': 'Evtek New Belt',
 
-    'train_images': './data/mixed_set_1_coco_scaled/images/',
-    'train_info': './data/mixed_set_1_coco_scaled/annotations/data.json',
+    'train_images': './data/current_set/images/',
+    'train_info': './data/current_set/annotations/data.json',
 
-    'valid_images': './data/mixed_set_1_coco_scaled/images/',
-    'valid_info': './data/mixed_set_1_coco_scaled/annotations/data.json',
+    'valid_images': './data/current_set/images/',
+    'valid_info': './data/current_set/annotations/data.json',
 
     'has_gt': True,
-    'class_names': EVTEK_MIXEDSET1_CLASSES
+    'class_names': EVTEK_CLASSES
 })
 
 coco2014_dataset = dataset_base.copy({
@@ -648,11 +648,11 @@ yolact_base_config = coco_base_config.copy({
     'name': 'yolact_base',
 
     # Dataset stuff
-    'dataset': evtek_mixedset1_dataset,
-    'num_classes': len(evtek_mixedset1_dataset.class_names) + 1,
+    'dataset': evtek_dataset,
+    'num_classes': len(evtek_dataset.class_names) + 1,
 
     # Image Size
-    'max_size': 612,
+    'max_size': 550,
 
     # Training params
     'lr_steps': (280000, 600000, 700000, 750000),
