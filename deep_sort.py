@@ -213,6 +213,7 @@ def initialize_video(net: Yolact):
     target_fps = round(vid.get(cv2.CAP_PROP_FPS))
     frame_width = round(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = round(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out = cv2.VideoWriter("deep_sort.mp4", cv2.VideoWriter_fourcc(*"mp4v"), target_fps, (frame_width, frame_height))
 
     net = CustomDataParallel(net).cuda()
     transform = torch.nn.DataParallel(FastBaseTransform()).cuda()
@@ -407,7 +408,10 @@ def initialize_video(net: Yolact):
         # print(preds)
         img_numpy = prep_display(preds, frame, None, None, undo_transform=False)
         # cv2.imshow("windows", img_numpy)
-        cv2.VideoWriter("deep_sort.mp4", cv2.VideoWriter_fourcc(*"mp4v"), target_fps, (frame_width, frame_height))
+        out.write(img_numpy)
+
+    vid.release()
+    out.release()
     cv2.destroyAllWindows()
 
 
