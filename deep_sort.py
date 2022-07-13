@@ -18,6 +18,7 @@ from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from deep_sort import generate_detections as gdet
 import numpy as np
+import matplotlib.pyplot as plt
 
 weights_path = os.path.join("weights", "yolact_plus_resnet50_94_130000.pth")
 video_path = r"test.mp4"
@@ -159,6 +160,9 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
     boxs = np.array([d.tlwh for d in detections])
     scores = np.array([d.confidence for d in detections])
     classes = np.array([d.class_name for d in detections])
+
+    cmap = plt.get_cmap('tab20b')
+    colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
 
     tracker.predict()
     tracker.update(detections)
@@ -402,7 +406,8 @@ def initialize_video(net: Yolact):
         preds = net(batch)
         # print(preds)
         img_numpy = prep_display(preds, frame, None, None, undo_transform=False)
-        cv2.imshow("windows", img_numpy)
+        # cv2.imshow("windows", img_numpy)
+        cv2.VideoWriter("deep_sort.mp4", cv2.VideoWriter_fourcc(*"mp4v"), target_fps, (frame_width, frame_height))
     cv2.destroyAllWindows()
 
 
