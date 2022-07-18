@@ -22,7 +22,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 weights_path = os.path.join("weights", "yolact_plus_resnet50_94_130000.pth")
-dataset_path = r"~/EvtekNN/yolact/data/mixed_set_1"
+dataset_path = r"/home/jay/EvtekNN/yolact/data/mixed_set_1"
 json_path = os.path.join(dataset_path, "annotations", "data.json")
 images_path = os.path.join(dataset_path, "images")
 top_k = 20
@@ -223,23 +223,22 @@ def initialize_dataset(net: Yolact):
     net = CustomDataParallel(net).cuda()
     with open(os.path.join(json_path), 'r') as f:
         data = json.load(f)
+        id = 5
+        x, y, w, h = data['annotations'][id]['bbox']
+        file_name = data['images'][data['annotations'][id]['image_id'] - 1]['file_name']
+        print(data['annotations'][id]['image_id'], data['images'][data['annotations'][id]['image_id'] - 1])
+        image = cv2.imread(os.path.join(images_path, file_name), cv2.IMREAD_COLOR)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # cv2.rectangle(image, (round(x), round(y)), (round(x+w), round(y+h)), (255, 255, 255), 1)
+        # cv2.imshow("win", image)
 
-        for annotation in data['annotations']:
-            x, y, w, h = annotation['bbox']
-            file_name = data['images'][annotation['image_id'] - 1]['file_name']
-            print(annotation['image_id'], data['images'][annotation['image_id'] - 1])
-            image = cv2.imread(os.path.join(images_path, file_name), cv2.IMREAD_COLOR)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            cv2.rectangle(image, (round(x), round(y)), (round(x+w), round(y+h)), (255, 255, 255), 1)
-            # cv2.imshow("win", image)
+        torch_image = torch.from_numpy(image).cuda().float()
+        batch = FastBaseTransform()(torch_image.unsqueeze(0))
+        preds = net(batch)
+        img_numpy = prep_display(preds, torch_image, None, None, undo_transform=False)
+        # cv2.imshow("win", img_numpy)
+        cv2.imwrite("test.jpg", img_numpy)
 
-            torch_image = torch.from_numpy(image).cuda().float()
-            batch = FastBaseTransform()(torch_image.unsqueeze(0))
-            preds = net(batch)
-            img_numpy = prep_display(preds, torch_image, None, None, undo_transform=False)
-            # cv2.imshow("win", img_numpy)
-            cv2.imwrite("test.jpg", img_numpy)
-            break
 
     cv2.destroyAllWindows()
 
