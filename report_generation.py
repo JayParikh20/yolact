@@ -1,3 +1,4 @@
+import json
 import os.path
 from collections import defaultdict
 
@@ -21,11 +22,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 weights_path = os.path.join("weights", "yolact_plus_resnet50_94_130000.pth")
-video_path = r"test.mp4"
+dataset_path = r"~/EvtekNN/yolact/data/mixed_set_1"
+json_path = os.path.join(dataset_path, "annotations", "data.json")
+images_path = os.path.join(dataset_path, "images")
 top_k = 20
 
 color_cache = defaultdict(lambda: {})
-
 
 def format_boxes(bboxes):
     for box in bboxes:
@@ -206,31 +208,39 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
     return img_numpy
 
 
-def initialize_video(net: Yolact):
+ih = 2448
+iw = 2048
+scaleh = 550/ih
+scalew = 550/iw
+
+ih_scaled = round(ih * scaleh)
+iw_scaled = round(iw * scalew)
+
+
+def initialize_dataset(net: Yolact):
     cudnn.benchmark = True
 
-    vid = cv2.VideoCapture(video_path)
-    target_fps = round(vid.get(cv2.CAP_PROP_FPS))
-    frame_width = round(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = round(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    out = cv2.VideoWriter("deep_sort.mp4", cv2.VideoWriter_fourcc(*"mp4v"), target_fps, (frame_width, frame_height))
-
     net = CustomDataParallel(net).cuda()
+    with open(os.path.join(json_path), 'r') as f:
+        data = json.load(f)
 
-    while True:
-        frame = vid.read()[1]
-        if frame is None or cv2.waitKey(1) == 27:
+        for annotation in data['annotations']:
+            x, y, w, h = annotation['bbox']
+            file_name = data['images'][annotation['image_id'] - 1]['file_name']
+            print(annotation['image_id'], data['images'][annotation['image_id'] - 1])
+            image = cv2.imread(os.path.join(images_path, file_name), cv2.IMREAD_COLOR)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            cv2.rectangle(image, (round(x), round(y)), (round(x+w), round(y+h)), (255, 255, 255), 1)
+            # cv2.imshow("win", image)
+
+            torch_image = torch.from_numpy(image).cuda().float()
+            batch = FastBaseTransform()(torch_image.unsqueeze(0))
+            preds = net(batch)
+            img_numpy = prep_display(preds, torch_image, None, None, undo_transform=False)
+            # cv2.imshow("win", img_numpy)
+            cv2.imwrite("test.jpg", img_numpy)
             break
-        frame = torch.from_numpy(frame).cuda().float()
-        batch = FastBaseTransform()(frame.unsqueeze(0))
-        preds = net(batch)
-        # print(preds)
-        img_numpy = prep_display(preds, frame, None, None, undo_transform=False)
-        # cv2.imshow("windows", img_numpy)
-        out.write(img_numpy)
 
-    vid.release()
-    out.release()
     cv2.destroyAllWindows()
 
 
@@ -239,7 +249,7 @@ def track(net: Yolact):
     net.detect.use_cross_class_nms = False
     cfg.mask_proto_debug = False
 
-    initialize_video(net)
+    initialize_dataset(net)
 
 
 if __name__ == '__main__':
