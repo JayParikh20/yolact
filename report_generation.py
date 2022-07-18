@@ -49,14 +49,6 @@ class CustomDataParallel(torch.nn.DataParallel):
         return sum(outputs, [])
 
 
-max_cosine_dst = 0.05
-nn_budget = None
-nms_max_overlap = 1.0
-metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_dst, nn_budget)
-tracker = Tracker(metric)
-encoder = gdet.create_box_encoder(r"mars-small128.pb", batch_size=1)
-
-
 def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mask_alpha=0.45, fps_str=''):
     """
     Note: If undo_transform=False then im_h and im_w are allowed to be None.
@@ -154,56 +146,56 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
     if num_dets_to_consider == 0:
         return img_numpy
 
-    bboxes = format_boxes([boxes[i, :] for i in reversed(range(num_dets_to_consider))])
-    features = encoder(img_numpy, bboxes)
-    class_names = [cfg.dataset.class_names[classes[cid]] for cid in reversed(range(num_dets_to_consider))]
-    detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature in zip(bboxes, scores, class_names, features)]
+    # bboxes = format_boxes([boxes[i, :] for i in reversed(range(num_dets_to_consider))])
+    # features = encoder(img_numpy, bboxes)
+    # class_names = [cfg.dataset.class_names[classes[cid]] for cid in reversed(range(num_dets_to_consider))]
+    # detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature in zip(bboxes, scores, class_names, features)]
 
-    boxs = np.array([d.tlwh for d in detections])
-    scores = np.array([d.confidence for d in detections])
-    classes = np.array([d.class_name for d in detections])
+    # boxs = np.array([d.tlwh for d in detections])
+    # scores = np.array([d.confidence for d in detections])
+    # classes = np.array([d.class_name for d in detections])
+    #
+    # cmap = plt.get_cmap('tab20b')
+    # colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
 
-    cmap = plt.get_cmap('tab20b')
-    colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
+    # tracker.predict()
+    # tracker.update(detections)
+    #
+    # # update tracks
+    # for track in tracker.tracks:
+    #     if not track.is_confirmed() or track.time_since_update > 1:
+    #         continue
+    #     bbox = track.to_tlbr()
+    #     class_name = track.get_class()
+    #
+    #     # draw bbox on screen
+    #     color = colors[int(track.track_id) % len(colors)]
+    #     color = [i * 255 for i in color]
+    #     cv2.rectangle(img_numpy, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
+    #     cv2.rectangle(img_numpy, (int(bbox[0]), int(bbox[1] - 80)), (int(bbox[0]) + (len(class_name) + len(str(track.track_id))) * 22, int(bbox[1])), color, -1)
+    #     cv2.putText(img_numpy, class_name + "-" + str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 1, (255, 255, 255), 2)
 
-    tracker.predict()
-    tracker.update(detections)
+    for j in reversed(range(num_dets_to_consider)):
+        x1, y1, x2, y2 = boxes[j, :]
+        color = get_color(j)
+        score = scores[j]
 
-    # update tracks
-    for track in tracker.tracks:
-        if not track.is_confirmed() or track.time_since_update > 1:
-            continue
-        bbox = track.to_tlbr()
-        class_name = track.get_class()
+        cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
 
-        # draw bbox on screen
-        color = colors[int(track.track_id) % len(colors)]
-        color = [i * 255 for i in color]
-        cv2.rectangle(img_numpy, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
-        cv2.rectangle(img_numpy, (int(bbox[0]), int(bbox[1] - 80)), (int(bbox[0]) + (len(class_name) + len(str(track.track_id))) * 22, int(bbox[1])), color, -1)
-        cv2.putText(img_numpy, class_name + "-" + str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 1, (255, 255, 255), 2)
+        _class = cfg.dataset.class_names[classes[j]]
+        text_str = '%s: %.2f' % (_class, score)
 
-    # for j in reversed(range(num_dets_to_consider)):
-    #     x1, y1, x2, y2 = boxes[j, :]
-    #     color = get_color(j)
-    #     score = scores[j]
-    #
-    #     cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
-    #
-    #     _class = cfg.dataset.class_names[classes[j]]
-    #     text_str = '%s: %.2f' % (_class, score)
-    #
-    #     font_face = cv2.FONT_HERSHEY_DUPLEX
-    #     font_scale = 0.6
-    #     font_thickness = 1
-    #
-    #     text_w, text_h = cv2.getTextSize(text_str, font_face, font_scale, font_thickness)[0]
-    #
-    #     text_pt = (x1, y1 - 3)
-    #     text_color = [255, 255, 255]
-    #
-    #     cv2.rectangle(img_numpy, (x1, y1), (x1 + text_w, y1 - text_h - 4), color, -1)
-    #     cv2.putText(img_numpy, text_str, text_pt, font_face, font_scale, text_color, font_thickness, cv2.LINE_AA)
+        font_face = cv2.FONT_HERSHEY_DUPLEX
+        font_scale = 0.6
+        font_thickness = 1
+
+        text_w, text_h = cv2.getTextSize(text_str, font_face, font_scale, font_thickness)[0]
+
+        text_pt = (x1, y1 - 3)
+        text_color = [255, 255, 255]
+
+        cv2.rectangle(img_numpy, (x1, y1), (x1 + text_w, y1 - text_h - 4), color, -1)
+        cv2.putText(img_numpy, text_str, text_pt, font_face, font_scale, text_color, font_thickness, cv2.LINE_AA)
 
     return img_numpy
 
