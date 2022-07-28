@@ -1,6 +1,8 @@
 import json
+import operator
 import os.path
 from collections import defaultdict
+import random
 
 import cv2
 import torch
@@ -20,14 +22,45 @@ from deep_sort.tracker import Tracker
 from deep_sort import generate_detections as gdet
 import numpy as np
 import matplotlib.pyplot as plt
+from tabulate import tabulate
+from pycocotools.coco import COCO
+import seaborn as sn
+import pandas as pd
+from pdflatex import PDFLaTeX
 
-weights_path = os.path.join("weights", "yolact_plus_resnet50_94_130000.pth")
-dataset_path = r"/home/jay/EvtekNN/yolact/data/mixed_set_1"
+model_name = "yolact_plus_resnet50_94_130000.pth"
+dataset_path = r"D:\NoSpaceFolder\Projects\EvTek\dataset\coco\scaled\2021-07-27_14-50-49_mixed_set_1\550_550"
+model_dataset = "2021-10-14-mrcnn_40_classes_only_new_belt_adapt_resize"
+test_dataset = "2021-07-27_14-50-49_mixed_set_1"
+
+top_k = 25  # Max number of objects to be detected
+mask_iou_threshold = 0.7  # Mask IOU threshold
+center_threshold = 15  # Threshold distance between two centers of bbox to detect them as same objects
+
+ih = 2448
+iw = 2048
+scaleh = 550 / ih
+scalew = 550 / iw
+
+ih_scaled = round(ih * scaleh)
+iw_scaled = round(iw * scalew)
+
+weights_path = os.path.join("weights", model_name)
 json_path = os.path.join(dataset_path, "annotations", "data.json")
 images_path = os.path.join(dataset_path, "images")
-top_k = 20
 
 color_cache = defaultdict(lambda: {})
+
+
+class Classification:
+    def __init__(self, tp, fp, fn):
+        self.tp = tp
+        self.fp = fp
+        self.fn = fn
+
+    def __add__(self, other):
+        return Classification(self.tp + other.tp, self.fp + other.fp, self.fn + other.fn)
+
 
 def format_boxes(bboxes):
     for box in bboxes:
@@ -200,37 +233,316 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
     return img_numpy
 
 
-ih = 2448
-iw = 2048
-scaleh = 550/ih
-scalew = 550/iw
+def apply_mask(image, mask):
+    image = np.array(image)
+    mask = np.array(mask)
+    mask = np.stack((mask,) * 3, axis=-1)
+    resultant = image * mask
+    return resultant
 
-ih_scaled = round(ih * scaleh)
-iw_scaled = round(iw * scalew)
+
+def get_mask_iou(gt_mask, pred_mask):
+    intersection = np.logical_and(gt_mask, pred_mask)
+    union = np.logical_or(gt_mask, pred_mask)
+    return np.sum(intersection) / np.sum(union)
 
 
 def initialize_dataset(net: Yolact):
     cudnn.benchmark = True
 
+    model_classes = cfg.dataset.class_names
+
+    missing_classes = []
+
     net = CustomDataParallel(net).cuda()
+
     with open(os.path.join(json_path), 'r') as f:
         data = json.load(f)
-        id = 5
-        x, y, w, h = data['annotations'][id]['bbox']
-        file_name = data['images'][data['annotations'][id]['image_id'] - 1]['file_name']
-        print(data['annotations'][id]['image_id'], data['images'][data['annotations'][id]['image_id'] - 1])
-        image = cv2.imread(os.path.join(images_path, file_name), cv2.IMREAD_COLOR)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        # cv2.rectangle(image, (round(x), round(y)), (round(x+w), round(y+h)), (255, 255, 255), 1)
-        # cv2.imshow("win", image)
+        test_dataset_names = [cat['name'] for cat in data['categories']]
 
-        torch_image = torch.from_numpy(image).cuda().float()
-        batch = FastBaseTransform()(torch_image.unsqueeze(0))
-        preds = net(batch)
-        img_numpy = prep_display(preds, torch_image, None, None, undo_transform=False)
-        # cv2.imshow("win", img_numpy)
-        cv2.imwrite("test.jpg", img_numpy)
+        for index in range(len(test_dataset_names)):
+            if test_dataset_names[index] not in model_classes:
+                missing_classes.append(test_dataset_names[index])
 
+        if missing_classes:
+            print("\n\nMissing Test Classes in Model Config:", missing_classes)
+            print("Missing Classes will be changed to \"Rest\"")
+
+        total_objects = 0
+        true_positive = 0
+        matched_multiple = 0
+        false_negative = 0
+        false_positive = 0
+        undetected_classes = {}
+        mismatched_classes = {}
+        object_classification = {}
+        max_image_id = len(data['images'])
+        confusion_matrix = np.zeros((len(model_classes), len(model_classes)))
+
+        for img_id in range(max_image_id):
+            file_name = data['images'][img_id]['file_name']
+            image = cv2.imread(os.path.join(images_path, file_name), cv2.IMREAD_COLOR)
+
+            annotation_bboxes = []
+            annotation_classes = []
+            annotation_masks = []
+
+            for annotation in data['annotations']:
+                if annotation['image_id'] == img_id + 1:
+                    total_objects += 1
+                    annotation_bboxes.append(annotation['bbox'])
+                    _class = data['categories'][annotation['category_id'] - 1]['name']
+                    if _class in missing_classes:
+                        _class = "Rest"
+                    annotation_classes.append(_class)
+
+                    segmentation = annotation['segmentation'][0]
+                    image_binary_mask = np.zeros((550, 550), np.uint8)
+                    cv2.drawContours(image_binary_mask, [np.round(segmentation).reshape((len(segmentation) // 2, 2)).astype(np.int64)], -1, (255, 255, 255), -1)
+                    annotation_masks.append(image_binary_mask)
+            if not annotation_bboxes:
+                continue
+
+            torch_image = torch.from_numpy(image).cuda().float()
+            batch = FastBaseTransform()(torch_image.unsqueeze(0))
+            preds = net(batch)
+
+            h, w, _ = torch_image.shape
+            save = cfg.rescore_bbox
+            cfg.rescore_bbox = True
+            t = postprocess(preds, w, h, visualize_lincomb=False, crop_masks=True, score_threshold=0.9)
+            idx = t[1].argsort(0, descending=True)[:top_k]
+            pred_masks = t[3][idx]
+            pred_classes, pred_scores, pred_bboxes = [x[idx].cpu().numpy() for x in t[:3]]
+            pred_classes = [cfg.dataset.class_names[c] for c in pred_classes]
+            pred_bboxes = [[box[0], box[1], box[2] - box[0], box[3] - box[1]] for box in pred_bboxes]
+            pred_masks = pred_masks.cpu().detach().numpy()
+            cfg.rescore_bbox = save
+
+            for index, annotation_mask in enumerate(annotation_masks):
+                tp = 0
+                fp = 0
+
+                for index2, pred_mask in enumerate(pred_masks):
+                    annotation_center = np.array([annotation_bboxes[index][0] + annotation_bboxes[index][2] // 2, annotation_bboxes[index][1] + annotation_bboxes[index][3] // 2])
+                    pred_center = np.array([pred_bboxes[index2][0] + pred_bboxes[index2][2] // 2, pred_bboxes[index2][1] + pred_bboxes[index2][3] // 2])
+                    center_distance = np.linalg.norm(annotation_center - pred_center)
+                    if get_mask_iou(annotation_mask, pred_mask) > mask_iou_threshold and center_distance < center_threshold:
+                        confusion_matrix[model_classes.index(annotation_classes[index]), model_classes.index(pred_classes[index2])] += 1
+                        if annotation_classes[index] == pred_classes[index2]:
+                            tp += 1
+                        else:
+                            if center_distance < center_threshold:
+                                fp += 1
+                                if annotation_classes[index] not in mismatched_classes:
+                                    mismatched_classes[annotation_classes[index]] = [pred_classes[index2]]
+                                elif annotation_classes[index] in mismatched_classes and pred_classes[index2] not in mismatched_classes[annotation_classes[index]]:
+                                    mismatched_classes[annotation_classes[index]].append(pred_classes[index2])
+
+                _classification = Classification(0, 0, 0)
+
+                if tp == 0 and fp == 0:
+                    false_negative += 1
+                    _classification.fn = 1
+                    if annotation_classes[index] in undetected_classes:
+                        undetected_classes[annotation_classes[index]] += 1
+                    else:
+                        undetected_classes[annotation_classes[index]] = 1
+                elif tp == 0 and fp == 1:
+                    false_positive += 1
+                    _classification.fp = 1
+                elif tp == 1 and fp == 0:
+                    true_positive += 1
+                    _classification.tp = 1
+                elif tp > 1 or fp > 1:
+                    matched_multiple += 1
+
+                if annotation_classes[index] in object_classification:
+                    object_classification[annotation_classes[index]] += _classification
+                else:
+                    object_classification[annotation_classes[index]] = _classification
+
+        undetected_classes = dict(sorted(undetected_classes.items(), key=lambda item: item[1], reverse=True))
+
+        print("\n\nMeta")
+        print("Model Weight:", model_name)
+        print("Model Dataset:", model_dataset)
+        print("Test Dataset:", test_dataset)
+        print("Number of Classes: ", len(model_classes))
+        print("Number of Test Images", len(data['images']))
+
+        print("\nTotal Objects:", total_objects)
+        print("Matched Correctly:", true_positive, f"({np.round((true_positive / total_objects) * 100, decimals=2)}%)")
+        print("Mis-Classified (FP) Objects:", false_positive, f"({np.round((false_positive / total_objects) * 100, decimals=2)}%)")
+        print("Undetected (FN) Objects:", false_negative, f"({np.round((false_negative / total_objects) * 100, decimals=2)}%)")
+        print("Matched Multiple Times:", matched_multiple)
+
+        print("\nMis-Classified (FP) Classes:")
+        for key, value in mismatched_classes.items():
+            print(f"{key} sometimes detected as {', '.join(value)}")
+        print("\nUndetected (FN) Classes:")
+        for key, value in undetected_classes.items():
+            print(f"{key}: x{value}")
+
+        print("\n\nObject Classification:\n")
+        # classification_dict = {'Class': ['precision', 'recall', 'f1', 'accuracy']}
+        table_data = []
+        head = ['Class', 'Precision', 'Recall', 'F1 score', 'Accuracy']
+        for key, value in object_classification.items():
+            precision = value.tp / float(value.tp + value.fp)
+            recall = value.tp / float(value.tp + value.fn)
+            f1 = (2 * precision * recall) / float(precision + recall)
+            acc = value.tp / float(value.tp + value.fp + value.fn)
+            # print(key, precision, recall, f1, acc)
+            table_data.append([key, round(precision, 2), round(recall, 2), round(f1, 2), round(acc, 2)])
+
+        print(tabulate(table_data, headers=head, tablefmt="github"))
+
+        confusion_matrix_df = pd.DataFrame(confusion_matrix.astype(np.uint8), index=model_classes, columns=model_classes)
+        fig, ax = plt.subplots(figsize=(15, 15))
+        ax = sn.heatmap(confusion_matrix_df, annot=True, square=True, annot_kws={"size": 10}, fmt='d', cmap='YlGnBu', cbar=False, ax=ax)  # font size
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0, fontsize=11)
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=90, fontsize=11, rotation_mode='anchor', ha='right')
+        plt.tight_layout()
+        plt.savefig('confusion_matrix.png')
+
+        outstr = "\\begin{tabular}{@{}lllll}\n"
+        # first, write header
+        outstr += "Class Name"
+        for name in ['Precision', 'Recall', 'f1-score', 'Accuracy']:
+            outstr += " & %s" % name
+        outstr += "\\\\\n"
+        for key, value in object_classification.items():
+            outstr += key.replace("_", "\\_")
+            precision = value.tp / float(value.tp + value.fp)
+            recall = value.tp / float(value.tp + value.fn)
+            f1 = (2 * precision * recall) / float(precision + recall)
+            acc = value.tp / float(value.tp + value.fp + value.fn)
+            outstr += " & %.3f" % round(precision, 3)
+            outstr += " & %.3f" % round(recall, 3)
+            outstr += " & %.3f" % round(f1, 3)
+            outstr += " & %.3f" % round(acc, 3)
+            outstr += "\\\\\n"
+        outstr += "\\end{tabular}\n\n"
+
+        with open('report.tex', 'w+') as outfile:
+            outfile.write("\\documentclass[12pt, a4paper]{article}\n")
+            outfile.write("\\usepackage[margin=2.0cm]{geometry}\n")
+            outfile.write("\\usepackage{graphicx}\n")
+            outfile.write("\\title{Evtek AI Evaluation Report}\n")
+            outfile.write("\\date{\\today}\n")
+            outfile.write("\\setlength{\\parindent}{0pt}\n")
+            outfile.write("\\begin{document}\n")
+            outfile.write("\\includegraphics[width=.3\\textwidth]{../assets/evtek_logo.png}\\\\\n\n")
+            outfile.write("{\\Large{Evtek AI Evaluation Report \\\\\\today}}\n\n")
+
+            outfile.write("\\vspace{1cm}\n\n")
+
+            # outfile.write("\\begin{minipage}[t]{0.49\\textwidth}\n")
+            # outfile.write("\\centering\n")
+            # outfile.write("\\includegraphics[width=.15\\textwidth]{../assets/icon_search.png}\\\\\n")
+            # outfile.write("\\vspace{.5cm}\n")
+            # outfile.write("{\\Huge{%.2f\\%%}}\\\\\n" % (cnt_det_match_unique / cnt_det_total * 100.0))
+            # outfile.write("Detection rate\\\\\n")
+            # outfile.write("\\end{minipage}\n")
+            #
+            # outfile.write("\\begin{minipage}[t]{0.49\\textwidth}\n")
+            # outfile.write("\\centering\n")
+            # outfile.write("\\includegraphics[width=.15\\textwidth]{../assets/icon_analysis.png}\\\\\n")
+            # outfile.write("\\vspace{.5cm}\n")
+            # outfile.write("{\\Huge{%.2f\\%%}}\\\\\n" % (clfr['accuracy'] * 100.))
+            # outfile.write("Classification accuracy\\\\\n")
+            # outfile.write("\\end{minipage}\\\\\n")
+            #
+            # outfile.write("\\vspace{.5cm}\n\n")
+            #
+            # outfile.write("\\begin{minipage}[t]{0.49\\textwidth}\n")
+            # outfile.write("\\centering\n")
+            # outfile.write("\\includegraphics[width=.15\\textwidth]{../assets/icon_count.png}\\\\\n")
+            # outfile.write("\\vspace{.5cm}\n")
+            # outfile.write("{\\Huge{%.d}}\\\\\n" % (len(self.class_names)))
+            # outfile.write("Classes\\\\\n")
+            # outfile.write("\\end{minipage}\n")
+            #
+            # outfile.write("\\begin{minipage}[t]{0.49\\textwidth}\n")
+            # outfile.write("\\centering\n")
+            # outfile.write("\\includegraphics[width=.15\\textwidth]{../assets/icon_stopwatch.png}\\\\\n")
+            # outfile.write("\\vspace{.5cm}\n")
+            # outfile.write("{\\Huge{%.3fs}}\\\\\n" % (np.mean(times[1:])))
+            # outfile.write("per image\\\\\n")
+            # outfile.write("\\end{minipage}\\\\\n\n")
+
+            outfile.write("\\vspace{.2cm}\n\n")
+
+            outfile.write("\\begin{figure}[!h]\n")
+            outfile.write("\\center")
+            outfile.write("\\includegraphics[width=.8\linewidth]{./confmat.png}\n")
+            outfile.write("\\end{figure}\n")
+
+            outfile.write("\\newpage\n")
+
+            outfile.write("\\textbf{Meta}\\\\\n")
+            outfile.write("Model Weight: %s\\\\\n" % model_name.replace("_", "\\_"))
+            outfile.write("Model Dataset: %s\\\\\n" % model_dataset.replace("_", "\\_"))
+            outfile.write("Test Dataset: %s\\\\\n" % test_dataset.replace("_", "\\_"))
+            outfile.write("Number of Classes: %d\\\\\n" % len(model_classes))  # first one is considered burn-in
+            outfile.write("Number of Test Images: %d\n\n" % len(data['images']))
+
+            outfile.write("\\vspace{.5cm}\n\n")
+
+            outfile.write("\\textbf{Missing Test Classes in Model Config:}\\\\\n")
+            outfile.write("%s\\\\\n" % "\\\\\n".join(missing_classes))
+            outfile.write("Missing Classes will be changed to Rest")
+
+            outfile.write("\\vspace{.5cm}\n\n")
+
+            ### DETECTION REPORT
+
+            outfile.write("\\textbf{Detection report}\\\\\n")
+            outfile.write("\\begin{tabular}{@{}ll}\n")
+            outfile.write("Total objects & %d\\\\\n" % total_objects)
+            outfile.write("Matched Correctly & %d (%.2f\\%%)\\\\\n" % (true_positive, (true_positive / total_objects) * 100.0))
+            outfile.write("Mis-Classified (FP) Objects & %d (%.2f\\%%)\\\\\n" % (false_positive, (false_positive / total_objects) * 100.0))
+            outfile.write("Undetected (FN) Objects & %d (%.2f\\%%)\\\\\n" % (false_negative, (false_negative / total_objects) * 100.0))
+            outfile.write("Matched Multiple Times & %d\\\\\n" % matched_multiple)
+            outfile.write("\\end{tabular}\n\n")
+
+            outfile.write("\\vspace{.5cm}\n\n")
+
+            # Misclassified report
+            outfile.write("\\textbf{Mis-Classified (FP) Classes}\\\\\n")
+            mc = len(mismatched_classes.items()) - 1
+            for index, (key, value) in enumerate(mismatched_classes.items()):
+                if index == mc:
+                    outfile.write("%s sometimes detected as %s\n" % (key, ', '.join(value)))
+                else:
+                    outfile.write("%s sometimes detected as %s\\\\\n" % (key, ', '.join(value)))
+            outfile.write("\n")
+
+            outfile.write("\\vspace{.5cm}\n\n")
+
+            # Undetected report
+            outfile.write("\\textbf{Undetected (FN) Classes}\\\\\n")
+            udc = len(undetected_classes.items()) - 1
+            for index, (key, value) in enumerate(undetected_classes.items()):
+                # print(f"{key}: x{value}")
+                if index == udc:
+                    outfile.write("%s: %s\n" % (key, f"x{value}"))
+                else:
+                    outfile.write("%s: %s\\\\\n" % (key, f"x{value}"))
+            outfile.write("\n")
+
+            outfile.write("\\vspace{.5cm}\n\n")
+
+            ### CLASSIFICATION REPORT
+            outfile.write("\\newpage")
+            outfile.write("\\textbf{Classification report}\\\\\n")
+            outfile.write(outstr)
+
+            outfile.write("\\newpage")
+            outfile.write("\\end{document}\n")
+
+    os.system("pdflatex report.tex")
 
     cv2.destroyAllWindows()
 
